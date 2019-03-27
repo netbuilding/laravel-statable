@@ -2,6 +2,8 @@
 
 namespace Iben\Statable;
 
+use Iben\Statable\Events\StateChangedEvent;
+use Illuminate\Support\Str;
 use SM\StateMachine\StateMachine;
 use Iben\Statable\Models\StateHistory;
 
@@ -12,12 +14,28 @@ trait Statable
      */
     protected $SM;
 
-    /**
-     * @return \Illuminate\Database\Eloquent\Model
-     */
-    public function stateHistory()
+    protected $lastTransition;
+
+    public static function bootStatable()
     {
-        return $this->morphMany(StateHistory::class, 'statable');
+        static::saved(function ($model) {
+            $property = $model->getStateProperty();
+            if ($model->wasChanged($property)) {
+                $from = $model->getOriginal($property);
+                $to = $model->getAttribute($property);
+
+                $transitionData['actor_id'] = $model->getActorId();
+                $transitionData['transition'] = $model->lastTransition;
+                $transitionData['from'] = $from;
+                $transitionData['to'] = $to;
+
+                $model->stateHistory()->create($transitionData);
+                $stateChangedEvent = $model->getStateChangedEvent();
+                if ($stateChangedEvent && class_exists($stateChangedEvent)) {
+                    event(new $stateChangedEvent($model, $from, $to, $model->lastTransition));
+                }
+            }
+        });
     }
 
     /**
@@ -40,12 +58,51 @@ trait Statable
     }
 
     /**
+     * @return \Illuminate\Database\Eloquent\Model
+     */
+    public function stateHistory()
+    {
+        return $this->morphMany(StateHistory::class, 'statable');
+    }
+
+    public function getStateChangedEvent(): string
+    {
+        return StateChangedEvent::class;
+    }
+
+    public function currentStateIs($state): bool
+    {
+        return $this->stateIs() === $state;
+    }
+
+    /**
      * @return mixed|string
      * @throws \Illuminate\Container\EntryNotFoundException
      */
     public function stateIs()
     {
         return $this->stateMachine()->getState();
+    }
+
+    /**
+     * @return mixed|\SM\StateMachine\StateMachine
+     * @throws \Illuminate\Container\EntryNotFoundException
+     */
+    public function stateMachine()
+    {
+        if (!$this->SM) {
+            $this->SM = app('sm.factory')->get($this, $this->getGraph());
+        }
+
+        return $this->SM;
+    }
+
+    /**
+     * @return string
+     */
+    protected function getGraph()
+    {
+        return Str::camel(class_basename(new static));
     }
 
     /**
@@ -59,7 +116,32 @@ trait Statable
             $this->save();
         }
 
-        return $this->stateMachine()->apply($transition);
+        $apply = $this->stateMachine()->apply($transition);
+        $this->lastTransition = $transition;
+        return $apply;
+    }
+
+    /**
+     * @return bool
+     */
+    protected function saveBeforeTransition()
+    {
+        return false;
+    }
+
+    public function canApplyList()
+    {
+        $transitions = array_keys(array_get($this->getConfig(), 'transitions', []));
+        return collect($transitions)->mapWithKeys(function ($item, $key) {
+            return [
+                $item => $this->canApply($item)
+            ];
+        });
+    }
+
+    public function getConfig()
+    {
+        return config("state-machine.{$this->getGraph()}");
     }
 
     /**
@@ -72,32 +154,18 @@ trait Statable
         return $this->stateMachine()->can($transition);
     }
 
-    /**
-     * @return mixed|\SM\StateMachine\StateMachine
-     * @throws \Illuminate\Container\EntryNotFoundException
-     */
-    public function stateMachine()
+    public function scopeOfState($query, $state)
     {
-        if (! $this->SM) {
-            $this->SM = app('sm.factory')->get($this, $this->getGraph());
-        }
-
-        return $this->SM;
+        return $query->where($this->getStateProperty(), $state);
     }
 
-    /**
-     * @return string
-     */
-    protected function getGraph()
+    public function getStateProperty()
     {
-        return 'default';
+        return array_get($this->getConfig(), 'property_path', 'state');
     }
 
-    /**
-     * @return bool
-     */
-    protected function saveBeforeTransition()
+    public function scopeWithoutState($query, $state)
     {
-        return false;
+        return $query->where($this->getStateProperty(), '<>', $state);
     }
 }
