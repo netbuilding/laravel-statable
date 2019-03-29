@@ -3,6 +3,7 @@
 namespace Iben\Statable;
 
 use Iben\Statable\Events\StateChangedEvent;
+use Iben\Statable\Events\StateChangedEventContract;
 use Illuminate\Support\Str;
 use SM\StateMachine\StateMachine;
 use Iben\Statable\Models\StateHistory;
@@ -24,16 +25,14 @@ trait Statable
                 $from = $model->getOriginal($property);
                 $to = $model->getAttribute($property);
 
-                $transitionData['actor_id'] = $model->getActorId();
-                $transitionData['transition'] = $model->lastTransition;
-                $transitionData['from'] = $from;
-                $transitionData['to'] = $to;
+                $model->stateHistory()->create([
+                    'actor_id' => $model->getActorId(),
+                    'transition' => $model->lastTransition,
+                    'from' => $from,
+                    'to' => $to,
+                ]);
 
-                $model->stateHistory()->create($transitionData);
-                $stateChangedEvent = $model->getStateChangedEvent();
-                if ($stateChangedEvent && class_exists($stateChangedEvent)) {
-                    event(new $stateChangedEvent($model, $from, $to, $model->lastTransition));
-                }
+                $model->fireStateChangedEvent($from, $to, $model->lastTransition);
             }
         });
     }
@@ -63,11 +62,6 @@ trait Statable
     public function stateHistory()
     {
         return $this->morphMany(StateHistory::class, 'statable');
-    }
-
-    public function getStateChangedEvent(): string
-    {
-        return StateChangedEvent::class;
     }
 
     public function currentStateIs($state): bool
@@ -167,5 +161,25 @@ trait Statable
     public function scopeWithoutState($query, $state)
     {
         return $query->where($this->getStateProperty(), '<>', $state);
+    }
+
+    public function fireStateChangedEvent($from, $to, $transition = null)
+    {
+        $stateChangedEvent = $this->getStateChangedEvent();
+
+        if (
+            $stateChangedEvent &&
+            class_exists($stateChangedEvent) &&
+            \is_subclass_of($stateChangedEvent, StateChangedEventContract::class)
+        ) {
+            event(new $stateChangedEvent($this, $from, $to, $transition));
+        }
+
+        event(new StateChangedEvent($this, $from, $to, $transition));
+    }
+
+    public function getStateChangedEvent(): string
+    {
+        return '';
     }
 }

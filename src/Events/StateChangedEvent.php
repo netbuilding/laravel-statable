@@ -9,7 +9,7 @@
 namespace Iben\Statable\Events;
 
 
-class StateChangedEvent
+class StateChangedEvent implements StateChangedEventContract
 {
     private $model;
     private $from;
