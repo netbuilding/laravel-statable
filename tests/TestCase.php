@@ -3,14 +3,17 @@
 namespace Iben\Statable\Test;
 
 use Iben\Statable\ServiceProvider;
-use Illuminate\Foundation\Auth\User;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Foundation\Auth\User;
 use Orchestra\Testbench\TestCase as BaseTestCase;
 use Sebdesign\SM\ServiceProvider as SMServiceProvider;
 
 abstract class TestCase extends BaseTestCase
 {
-    public function setUp()
+    /**
+     * @return void
+     */
+    public function setUp() : void
     {
         parent::setUp();
 

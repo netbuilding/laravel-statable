@@ -93,14 +93,6 @@ trait Statable
     }
 
     /**
-     * @return string
-     */
-    protected function getGraph()
-    {
-        return Str::camel(class_basename(new static));
-    }
-
-    /**
      * @param $transition
      * @return bool
      * @throws \SM\SMException|\Illuminate\Container\EntryNotFoundException
@@ -114,14 +106,6 @@ trait Statable
         $apply = $this->stateMachine()->apply($transition);
         $this->lastTransition = $transition;
         return $apply;
-    }
-
-    /**
-     * @return bool
-     */
-    protected function saveBeforeTransition()
-    {
-        return false;
     }
 
     public function canApplyList()
@@ -182,5 +166,21 @@ trait Statable
     public function getStateChangedEvent(): string
     {
         return '';
+    }
+
+    /**
+     * @return string
+     */
+    protected function getGraph()
+    {
+        return Str::camel(class_basename(new static));
+    }
+
+    /**
+     * @return bool
+     */
+    protected function saveBeforeTransition()
+    {
+        return false;
     }
 }
