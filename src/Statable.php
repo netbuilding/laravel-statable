@@ -4,6 +4,7 @@ namespace Iben\Statable;
 
 use Iben\Statable\Events\StateChangedEvent;
 use Iben\Statable\Events\StateChangedEventContract;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use SM\StateMachine\StateMachine;
 use Iben\Statable\Models\StateHistory;
@@ -125,7 +126,7 @@ trait Statable
 
     public function canApplyList()
     {
-        $transitions = array_keys(array_get($this->getConfig(), 'transitions', []));
+        $transitions = array_keys(Arr::get($this->getConfig(), 'transitions', []));
         return collect($transitions)->mapWithKeys(function ($item, $key) {
             return [
                 $item => $this->canApply($item)
@@ -155,7 +156,7 @@ trait Statable
 
     public function getStateProperty()
     {
-        return array_get($this->getConfig(), 'property_path', 'state');
+        return Arr::get($this->getConfig(), 'property_path', 'state');
     }
 
     public function scopeWithoutState($query, $state)
